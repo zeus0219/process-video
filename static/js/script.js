@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", function() {
     socket.on('message', (data) => {
         // If data is an image string, set it to the img element  
         if (data.startsWith('data:image/jpeg;base64,' )) {  
-            console.log(data,'3333333');
             display.src = data;
             // display.play();
             // display.src = data; // Set the source of the img to the incoming data  
