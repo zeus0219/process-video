@@ -1,49 +1,42 @@
 from flask import Flask, render_template
-from flask_socketio import SocketIO
-from PIL import Image, ImageDraw, ImageFont  
-import io
-import base64
+from flask_socketio import SocketIO, emit
+import numpy as np
+import cv2
 
 app = Flask(__name__)
 socketio = SocketIO(app)
-
 @app.route('/')
 def index():
     return render_template('index.html')
-@socketio.on('connect')  
-def handle_connect():  
-    print('Client connected')  
-    socketio.send('Welcome client!')  
-@socketio.on('message')
-def handle_message(data):
-    header, encoded = data.split(',', 1)
-    image_data = base64.b64decode(encoded)
-    image = Image.open(io.BytesIO(image_data))
-    draw = ImageDraw.Draw(image)  
-    text = "Processed Video"  
-    font_size = 36  
-    font_path = "arial.ttf"
-    font_color = (255, 0, 0)  # Red color  
-    font = ImageFont.truetype(font_path, font_size) 
-    text_position = (10, 10)  # Top-left corner  
-    draw.text(text_position, text, fill=font_color, font=font)  
-    overlay = Image.new('RGBA', image.size, (255, 0, 0, 128))
-    image = Image.alpha_composite(image.convert('RGBA'), overlay)  
-    
-    
-    buffer = io.BytesIO()  
-    image.convert('RGB').save(buffer, format="JPEG")  # Convert to 'RGB' to avoid any issues  
-    encoded_image = base64.b64encode(buffer.getvalue()).decode('utf-8')  
-    socketio.send(f'data:image/jpeg;base64,{encoded_image}')  
 
-    # Process the image here (e.g., apply filters, detect objects, etc.)
-    # processed_image = image  # Modify this line with your processing logic
+@socketio.on('frame')
+def handle_frame(data):
+    # Decode the incoming frame
+    frame = np.frombuffer(data, dtype=np.uint8)
+    frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
 
-    # If you want to send the processed image back, encode it again
-    # buffer = io.BytesIO()
-    # processed_image.save(buffer, format="JPEG")
-    # encoded_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    # socketio.send(f'data:image/jpeg;base64,{encoded_image}')
+    # Example processing: convert to grayscale
+    # processed_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text = 'Processed Video'
+    position = (50, 50)  # Text position (x, y)
+    font_scale = 1
+    font_color = (0, 255, 0)  # Text color (Green in BGR)
+    thickness = 2
+    cv2.putText(frame, text, position, font, font_scale, font_color, thickness, cv2.LINE_AA)
+
+    grayscale_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    # Apply a color map to the grayscale frame
+    color_mapped_frame = cv2.applyColorMap(grayscale_frame, cv2.COLORMAP_JET)
+
+    
+    _, buffer = cv2.imencode('.jpg', color_mapped_frame)
+    
+    # Send back the processed frame
+    emit('processed_frame', buffer.tobytes())
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000)
+    context = ('server.crt', 'server.key')  # Paths to your certificate and key files
+    socketio.run(app, host='0.0.0.0', port=5000,ssl_context=('cert.pem', 'key.pem'))
